@@ -1,0 +1,7 @@
+To run:
+
+1. Download cmake, make, and opencv (brew install cmake, brew install make, brew install opencv)
+2. cd build
+3. bash build.bash
+4. Put some images in build/test/
+5. Run ./image_processor

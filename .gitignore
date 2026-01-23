@@ -1,0 +1,11 @@
+build/TB_Chest_Radiography_Database
+build/test/*
+.vscode
+.DS_STORE
+build/CMakeFiles
+build/Makefile
+build/CMakeCache.txt
+build/cmake_install.cmake
+build/test_filter
+build/filter_out
+build/test
