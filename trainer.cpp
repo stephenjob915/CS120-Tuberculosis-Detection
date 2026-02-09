@@ -16,14 +16,9 @@ void addData(string directory_path, int label, vector<vector<double>> &X, vector
     int cnt = 0;
     for (const auto& entry : fs::directory_iterator(directory_path)) {
         cnt++;
-        if(cnt % 200 == 0) cout << cnt << endl;
-            // Check if the entry is a regular file
+        if(cnt % 200 == 0) cout << "Processed " << cnt << " files..." << endl;
         if (fs::is_regular_file(entry.status())) {
-            // cout << entry.path().filename().string() << endl;
             string fname = entry.path().string();
-            // vector<double> g = extractFeatures(fname);
-            // X.push_back(g);
-            // y.push_back(label);
             vector<vector<double>> img = imageToVector(fname);
             vector<double> imgf = flatten(img);
             X.push_back(imgf);
@@ -52,30 +47,97 @@ double dot(vector<double>& a, vector<double> &b){
 
     return re;
 }
+
+// Normalize features using z-score (mean=0, std=1)
+void normalizeFeatures(vector<vector<double>>& X, vector<double>& means, vector<double>& stdevs) {
+    if (X.empty()) return;
+    
+    // Calculate means
+    means.resize(X[0].size(), 0);
+    for (const auto& sample : X) {
+        for (size_t j = 0; j < sample.size(); j++) {
+            means[j] += sample[j];
+        }
+    }
+    for (size_t j = 0; j < means.size(); j++) {
+        means[j] /= X.size();
+    }
+    
+    // Calculate standard deviations
+    stdevs.resize(X[0].size(), 0);
+    for (const auto& sample : X) {
+        for (size_t j = 0; j < sample.size(); j++) {
+            double diff = sample[j] - means[j];
+            stdevs[j] += diff * diff;
+        }
+    }
+    for (size_t j = 0; j < stdevs.size(); j++) {
+        stdevs[j] = sqrt(stdevs[j] / X.size());
+    }
+    
+    // Normalize all samples
+    for (auto& sample : X) {
+        for (size_t j = 0; j < sample.size(); j++) {
+            if (stdevs[j] > 1e-10) {
+                sample[j] = (sample[j] - means[j]) / stdevs[j];
+            } else {
+                sample[j] = 0.0;
+            }
+        }
+    }
+}
 using namespace std;
 int main() {
     try {
         vector<vector<double>> X;
         vector<int> y;
+        vector<double> means, stdevs;
         
+        cout << "Loading Normal images..." << endl;
         addData("./TB_Chest_Radiography_Database/Normal", 0, X, y);
+        int normal_count = X.size();
 
-        vector<double> normal_avg = average(X);
-
-        X.clear();
-        y.clear();
+        cout << "Loading Tuberculosis images..." << endl;
         addData("./TB_Chest_Radiography_Database/Tuberculosis", 1, X, y);
+        int tb_count = X.size() - normal_count;
         
-        vector<double> positive_avg = average(X);
+        cout << "Loaded " << normal_count << " Normal images and " << tb_count << " TB images" << endl;
+        cout << "Normalizing features (z-score)..." << endl;
+        normalizeFeatures(X, means, stdevs);
         
+        // Separate data after normalization
+        vector<vector<double>> normal_X(X.begin(), X.begin() + normal_count);
+        vector<vector<double>> tb_X(X.begin() + normal_count, X.end());
+        
+        vector<double> normal_avg = average(normal_X);
+        vector<double> positive_avg = average(tb_X);
+        
+        cout << "Saving normalized weights..." << endl;
         std::ofstream os("weights.txt");
-        for(int i = 0 ; i < positive_avg.size(); i++){
+        for(size_t i = 0 ; i < positive_avg.size(); i++){
             os << normal_avg[i] << " \n"[i == positive_avg.size() - 1];
         }
         
-        for(int i = 0 ; i < positive_avg.size(); i++){
+        for(size_t i = 0 ; i < positive_avg.size(); i++){
             os << positive_avg[i] << " \n"[i == positive_avg.size() - 1];
         }
+        os.close();
+        
+        // Save normalization parameters (means and stdevs for z-score)
+        cout << "Saving normalization parameters..." << endl;
+        std::ofstream norm_os("normalization.txt");
+        norm_os << means.size() << "\n";
+        for (double val : means) {
+            norm_os << val << " ";
+        }
+        norm_os << "\n";
+        for (double val : stdevs) {
+            norm_os << val << " ";
+        }
+        norm_os << "\n";
+        norm_os.close();
+        
+        cout << "Training complete! Weights and normalization parameters saved." << endl;
 
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
