@@ -11,8 +11,6 @@ void computeGLCMFeatures(const Mat& gray, double& contrast, double& energy,
     Mat quant = gray.clone();
     quant.convertTo(quant, CV_8U, 1.0 / 8.0);  // proper scaling 0–255 → 0–31
 
-
-    cout << quant.type() << endl;
     const int levels = 32;
     Mat glcm = Mat::zeros(levels, levels, CV_64F);
 
@@ -25,7 +23,6 @@ void computeGLCMFeatures(const Mat& gray, double& contrast, double& energy,
         }
     }
 
-    cout << "HI" << endl;
     // Normalize
     glcm /= sum(glcm)[0];
 
@@ -46,52 +43,55 @@ void computeGLCMFeatures(const Mat& gray, double& contrast, double& energy,
 
 vector<float> computeHOG(const Mat& gray)
 {
-    HOGDescriptor hog(
-        Size(64,128), // window
-        Size(16,16),  // block
-        Size(8,8),    // stride
-        Size(8,8),    // cell
-        9             // bins
-    );
-
-    Mat resized;
-    resize(gray, resized, Size(64,128));
-
     vector<float> descriptors;
-    hog.compute(resized, descriptors);
+    
+    try {
+        HOGDescriptor hog(
+            Size(64,128), // window
+            Size(16,16),  // block
+            Size(8,8),    // stride
+            Size(8,8),    // cell
+            9             // bins
+        );
 
+        Mat resized;
+        resize(gray, resized, Size(64,128));
+
+        hog.compute(resized, descriptors);
+    } catch (const std::exception& e) {
+        cout << "HOG computation failed: " << e.what() << endl;
+        // Return empty vector on failure
+        descriptors.clear();
+    }
+    
     return descriptors;
 }
 
 vector<double> extractFeatures(const string& filename) {
-    Mat img = imread(filename, IMREAD_GRAYSCALE);
-    if (img.empty()) {
-        cout << "Error: could not load image.\n" << endl;
-        throw;
-    }
-
-    // ---- GLCM features ----
-    double contrast, energy, homogeneity, entropy;
-    cout << "img size=" << img.cols << "x" << img.rows 
-     << " type=" << img.type() << endl;
-    computeGLCMFeatures(img, contrast, energy, homogeneity, entropy);
-
-    // cout << "GLCM Contrast:    " << contrast << endl;
-    // cout << "GLCM Energy:      " << energy << endl;
-    // cout << "GLCM Homogeneity: " << homogeneity << endl;
-    // cout << "GLCM Entropy:     " << entropy << endl;
-
-    // ---- HOG ----
-    vector<float> hogFeatures = computeHOG(img);
-    // cout << "HOG feature length: " << hogFeatures.size() << endl;
-
     vector<double> re;
+    
+    try {
+        Mat img = imread(filename, IMREAD_GRAYSCALE);
+        if (img.empty()) {
+            cout << "Warning: Could not load image: " << filename << endl;
+            return re;  // Return empty vector
+        }
 
-    for(float i : hogFeatures) re.push_back(i);
-    re.push_back(contrast);
-    re.push_back(energy);
-    re.push_back(homogeneity);
-    re.push_back(entropy);
+        // ---- GLCM features ----
+        double contrast, energy, homogeneity, entropy;
+        computeGLCMFeatures(img, contrast, energy, homogeneity, entropy);
+
+        // ---- HOG ----
+        vector<float> hogFeatures = computeHOG(img);
+
+        for(float i : hogFeatures) re.push_back(i);
+        re.push_back(contrast);
+        re.push_back(energy);
+        re.push_back(homogeneity);
+        re.push_back(entropy);
+    } catch (const std::exception& e) {
+        cout << "Error in extractFeatures for " << filename << ": " << e.what() << endl;
+    }
     
     return re;
 }
@@ -116,16 +116,22 @@ std::vector<std::vector<double>> imageToVector(const std::string& filename) {
         throw std::runtime_error("Error: Could not open or find the image: " + filename);
     }
     
-    // Step 2: Resize to 64x64
-    cv::Mat resized;
-    cv::resize(image, resized, cv::Size(64, 64), 0, 0, cv::INTER_CUBIC);
+    // Step 1.5: Enhance contrast with histogram equalization
+    cv::Mat enhanced;
+    cv::equalizeHist(image, enhanced);
     
-    // Step 3: Normalize
-    cv::Mat normalized;;
+    // Step 2: Resize to 48x48 (good balance of detail and speed)
+    cv::Mat resized;
+    cv::resize(enhanced, resized, cv::Size(48, 48), 0, 0, cv::INTER_CUBIC);
+    
+    // Step 3: Normalize with z-score
+    cv::Mat normalized;
     resized.convertTo(normalized, CV_64F, 1.0 / 255.0);
     cv::Scalar mean, stddev;
     cv::meanStdDev(normalized, mean, stddev);
-    normalized = (normalized - mean[0]) / stddev[0];
+    if (stddev[0] > 1e-10) {
+        normalized = (normalized - mean[0]) / stddev[0];
+    }
     
     std::vector<std::vector<double>> result;
     result.reserve(normalized.rows);
