@@ -5,3 +5,19 @@ To run:
 3. bash build.bash
 4. Put some images in build/test/
 5. Run ./image_processor
+
+Open your x64 Native Tools Command Prompt for VS and paste these two blocks.
+
+Step One: Build
+This ensures the computer is still looking at the right OpenCV folders and recompiles your main.cpp to make sure the accuracy logic is active.
+
+cd "C:\Users\steph\OneDrive\Documents\CS120 Tuberculosis Detector\CS120-Project-main\build"
+set OpenCV_DIR="C:\Users\steph\OneDrive\Documents\CS120 Tuberculosis Detector\opencv\build\x64\vc16\lib"
+cmake --build . --config Release
+
+Step Two: Train & Detect
+This moves into your app folder, runs the trainer to refresh your weights.txt, and then runs the detector to give you the final Accuracy, Precision, and Recall scores.
+
+cd Release
+trainer.exe
+image_processor.exe
